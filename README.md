@@ -1,2 +1,1 @@
-# ZxBowe
-React Native App Template with Dark Gradient Theme
+# ZxBowe\n\nReact Native App with Pure Dark Gradient Theme.\n\n## Setup\n1. npm install\n2. npx react-native run-android / run-ios\n\nPure dark grading text & background.
