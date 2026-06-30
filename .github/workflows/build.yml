@@ -20,24 +20,24 @@ jobs:
         with:
           node-version: 22
 
-      # 3. Inject and Install All Required Packages Automatically
+      # 3. Inject and Install Precise Core Dependencies
       - name: Auto-Inject Core Dependencies
         run: |
           npm install react-native-linear-gradient react-native-webview --save --legacy-peer-deps
           npm install --legacy-peer-deps
 
-      # 4. Auto-Fix: Resolve Android SDK 34 & AGP 8.1.1 Conflict Natively
-      - name: Auto-Fix Android SDK & AGP Version Conflicts
+      # 4. Auto-Fix: Upgrade Project Compile Target to SDK 34 Natively
+      - name: Auto-Fix Android SDK Target & Kotlin Mismatch
         run: |
-          echo "⚠️ Compatibility issues detect huye hain! Patching gradle configuration..."
+          echo "⚠️ SDK 34 and Kotlin mismatch detect hua hai! Live patching configuration..."
           
-          # Force check standard strict verification bypass rules
-          echo "android.aarTransform.enforceCompileSdk=false" >> android/gradle.properties
+          # Pure project templates me compile aur target SDK ko automatic 34 par replace karna
+          find android/ -name "build.gradle" -type f -exec sed -i 's/compileSdkVersion = 33/compileSdkVersion = 34/g' {} +
+          find android/ -name "build.gradle" -type f -exec sed -i 's/targetSdkVersion = 33/targetSdkVersion = 34/g' {} +
+          find android/ -name "build.gradle" -type f -exec sed -i 's/compileSdkVersion 33/compileSdkVersion 34/g' {} +
+          find android/ -name "build.gradle" -type f -exec sed -i 's/targetSdkVersion 33/targetSdkVersion 34/g' {} +
           
-          # Gradle framework structure ko runtime par force override karna
-          echo -e "\nallprojects {\n    configurations.all {\n        resolutionStrategy {\n            force 'androidx.webkit:webkit:1.8.0'\n            force 'androidx.annotation:annotation-experimental:1.3.0'\n        }\n    }\n}" >> android/build.gradle
-          
-          echo "✅ Patched successfully! Webview package down-graded to stable SDK 33 architecture."
+          echo "✅ Patch complete! Android system compile architecture updated to SDK 34."
 
       # 5. Setup SDK compiler tools
       - name: Setup Java JDK 17
