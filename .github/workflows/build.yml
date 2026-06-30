@@ -47,13 +47,19 @@ jobs:
           "
           npm install --legacy-peer-deps
 
-      # 4. Auto-Upgrade Gradle Wrapper (Fixes Spotless/Reanimated Requirement)
-      - name: Auto-Upgrade Gradle Wrapper to 8.5
+      # 4. Fix Gradle Wrapper WITHOUT running broken global gradle binary
+      - name: Direct Injection of Gradle Wrapper 8.5
         run: |
-          echo "🚀 Upgrading Gradle Wrapper dynamically to 8.5 to satisfy Spotless requirements..."
-          cd android
-          gradle wrapper --gradle-version 8.5 --distribution-type all
-          chmod +x gradlew
+          echo "🚀 Overwriting wrapper properties directly via file system injection..."
+          mkdir -p android/gradle/wrapper
+          cat << 'EOF' > android/gradle/wrapper/gradle-wrapper.properties
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-all.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+          echo "✅ Injected Gradle 8.5 path text into configs securely."
 
       # 5. Ultimate Auto-Fix: Inject Kotlin 2.1.0 & Force SDK 34 Globally
       - name: Ultimate Android Patch Engine
@@ -103,13 +109,17 @@ jobs:
           distribution: 'zulu'
           cache: 'gradle'
 
-      # 7. Build production target bundle
+      # 7. Grant execute permission to wrapper scripts
+      - name: Grant Execute Permission to Gradlew
+        run: chmod +x android/gradlew
+
+      # 8. Build production target bundle
       - name: Build Android APK (Release)
         run: |
           cd android
           ./gradlew assembleRelease --no-daemon
 
-      # 8. Collect output packages securely
+      # 9. Collect output packages securely
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
