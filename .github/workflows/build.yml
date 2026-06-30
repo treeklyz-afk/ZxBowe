@@ -14,16 +14,16 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Setup safe node engine
+      # 2. Setup Node environment
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      # 3. Handle dependency trees systematically
-      - name: Install System Dependencies
+      # 3. Inject and Install All Required Packages Automatically
+      - name: Auto-Inject Core Dependencies
         run: |
-          npm install react-native-linear-gradient --save --legacy-peer-deps
+          npm install react-native-linear-gradient react-native-webview --save --legacy-peer-deps
           npm install --legacy-peer-deps
 
       # 4. Setup SDK compiler tools
