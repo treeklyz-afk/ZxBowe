@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   SafeAreaView,
   StatusBar,
@@ -15,13 +15,12 @@ import {
   RefreshControl,
   TextInput,
   Alert,
-  FlatList,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Share from 'react-native-share';
 import Haptic from 'react-native-haptic-feedback';
-import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -118,7 +117,7 @@ export default function App() {
   const [checkoutForm, setCheckoutForm] = useState({ name: '', address: '', card: '' });
 
   // --- Reanimated values for modal gestures ---
-  const translateY = useSharedValue(0);
+  const translateY = useSharedValue(height);
   const detailModalOpacity = useSharedValue(0);
 
   // ---------- Load persisted settings ----------
@@ -261,7 +260,6 @@ export default function App() {
       Alert.alert('Incomplete', 'Please fill all fields.');
       return;
     }
-    // Simulate payment
     setPaymentSuccess(true);
     triggerHaptic('impactHeavy');
     setTimeout(() => {
@@ -273,13 +271,15 @@ export default function App() {
     }, 1500);
   };
 
-  // ---------- Animated detail modal ----------
+  // ---------- Reanimated Style Configuration ----------
   const detailAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
     opacity: detailModalOpacity.value,
   }));
 
   const openDetailModal = (post) => {
+    translateY.value = height; // Set panel back to bottom before entering
+    detailModalOpacity.value = 0;
     setSelectedPost(post);
     triggerHaptic('impactLight');
     translateY.value = withSpring(0, { damping: 20 });
@@ -294,26 +294,22 @@ export default function App() {
     detailModalOpacity.value = withSpring(0, { damping: 15 });
   };
 
-  const onGestureEvent = useCallback((event) => {
-    'worklet';
-    const { translationY } = event;
-    if (translationY > 0) {
-      translateY.value = translationY;
-    }
-  }, []);
-
-  const onHandlerStateChange = useCallback((event) => {
-    'worklet';
-    if (event.state === 5) { // END
-      if (translateY.value > 200) {
+  // Modern V2 Gesture Handler Configuration (Crash-Proof)
+  const panGesture = Gesture.Pan()
+    .onUpdate((event) => {
+      if (event.translationY > 0) {
+        translateY.value = event.translationY;
+      }
+    })
+    .onEnd((event) => {
+      if (event.translationY > 150) {
         closeDetailModal();
       } else {
-        translateY.value = withSpring(0);
+        translateY.value = withSpring(0, { damping: 15 });
       }
-    }
-  }, []);
+    });
 
-  // ---------- Splash ----------
+  // ---------- Splash Layout ----------
   if (screen === 'splash') {
     return (
       <View style={styles.splashContainer}>
@@ -328,7 +324,6 @@ export default function App() {
     );
   }
 
-  // ========== MAIN HOME ==========
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={styles.container}>
@@ -461,7 +456,7 @@ export default function App() {
           </ScrollView>
         )}
 
-        {/* -------- DETAIL MODAL (shared) -------- */}
+        {/* -------- DETAIL MODAL (CRASH-PROOF SYSTEM WITH GESTURE DETECTOR) -------- */}
         {selectedPost && (
           <Modal
             animationType="none"
@@ -472,10 +467,7 @@ export default function App() {
               triggerHaptic('selection');
             }}
           >
-            <PanGestureHandler
-              onGestureEvent={onGestureEvent}
-              onHandlerStateChange={onHandlerStateChange}
-            >
+            <GestureDetector gesture={panGesture}>
               <Animated.View style={[styles.detailContainer, detailAnimatedStyle]}>
                 <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
                   <StatusBar barStyle="light-content" backgroundColor="#000" />
@@ -552,7 +544,7 @@ export default function App() {
                   </ScrollView>
                 </SafeAreaView>
               </Animated.View>
-            </PanGestureHandler>
+            </GestureDetector>
           </Modal>
         )}
 
@@ -577,7 +569,7 @@ export default function App() {
           </Modal>
         )}
 
-        {/* -------- CART MODAL (Shop Mode only) -------- */}
+        {/* -------- CART MODAL -------- */}
         {isShopModeEnabled && (
           <Modal
             animationType="slide"
@@ -643,7 +635,7 @@ export default function App() {
           </Modal>
         )}
 
-        {/* -------- CHECKOUT MODAL (Shop Mode only) -------- */}
+        {/* -------- CHECKOUT MODAL -------- */}
         {isShopModeEnabled && (
           <Modal
             animationType="slide"
@@ -702,14 +694,14 @@ export default function App() {
           </Modal>
         )}
 
-        {/* -------- SETTINGS PANEL (with Shop Mode toggle) -------- */}
+        {/* -------- SETTINGS PANEL -------- */}
         <Modal
-          animationType="none"
+          animationType="slide"
           transparent={true}
           visible={settingsVisible}
           onRequestClose={() => setSettingsVisible(false)}
         >
-          <Animated.View style={[styles.modalOverlay, { opacity: settingsVisible ? 1 : 0 }]}>
+          <View style={styles.modalOverlay}>
             <View style={styles.iosPanel}>
               <View style={styles.iosDragIndicator} />
               <View style={styles.iosPanelHeader}>
@@ -791,7 +783,6 @@ export default function App() {
                       onValueChange={(val) => {
                         setIsShopModeEnabled(val);
                         triggerHaptic('impactLight');
-                        // Reset cart when toggling
                         if (val) {
                           setCartItems([]);
                         }
@@ -840,7 +831,7 @@ export default function App() {
                 </TouchableOpacity>
               </ScrollView>
             </View>
-          </Animated.View>
+          </View>
         </Modal>
       </SafeAreaView>
     </GestureHandlerRootView>
@@ -882,7 +873,7 @@ const styles = StyleSheet.create({
   addToCartText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
   emptyState: { padding: 40, alignItems: 'center' },
   emptyStateText: { color: '#8e8e93', fontSize: 14 },
-  detailContainer: { flex: 1, backgroundColor: '#000' },
+  detailContainer: { position: 'absolute', width: width, height: height, backgroundColor: '#000', borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden' },
   detailHeader: { height: 55, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, borderBottomWidth: 0.5, borderColor: '#1c1c1e', backgroundColor: '#000' },
   backButton: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#1c1c1e', borderRadius: 16 },
   backButtonText: { color: '#fff', fontWeight: '600', fontSize: 13, fontFamily: 'San Francisco' },
@@ -925,7 +916,6 @@ const styles = StyleSheet.create({
   cartIcon: { fontSize: 22, color: '#fff' },
   cartBadge: { position: 'absolute', top: -4, right: -6, backgroundColor: '#bf5af2', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
   cartBadgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-  // Cart Modal
   cartModalContainer: { flex: 1, backgroundColor: '#000' },
   cartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 0.5, borderColor: '#1c1c1e' },
   cartClose: { color: '#bf5af2', fontSize: 16 },
@@ -947,7 +937,6 @@ const styles = StyleSheet.create({
   cartTotal: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'right', marginBottom: 12 },
   checkoutButton: { backgroundColor: '#bf5af2', paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
   checkoutButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  // Checkout Modal
   checkoutContainer: { flex: 1, backgroundColor: '#000' },
   checkoutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 0.5, borderColor: '#1c1c1e' },
   checkoutForm: { padding: 16 },
