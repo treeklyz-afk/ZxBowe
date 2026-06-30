@@ -5,74 +5,27 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
-# Git Push karne ke liye write permission zaroori hai
-permissions:
-  contents: write
-
 jobs:
   build-android:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Repository Checkout
+      # 1. Code Checkout
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Setup Node.js
+      # 2. Setup Node.js (Node 22 use kiya hai taaki deprecation warning hat jaye)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
-      # 3. Dependencies Install Karna
+      # 3. Install Dependencies
       - name: Install Dependencies
         run: |
           npm install --legacy-peer-deps
 
-      # 4. Auto-Fix: Pure Android Folder Template Generate Karna
-      - name: Auto-Create Missing Android Files
-        run: |
-          if [ ! -f "android/build.gradle" ]; then
-            echo "⚠️ Android folder khali hai! React Native CLI se auto-generate kar rahe hain..."
-            
-            # app.json se app ka real name nikalna
-            APP_NAME=$(node -p "try { require('./app.json').name || require('./app.json').displayName } catch(e) { 'App' }")
-            # package.json se current react-native version nikalna
-            RN_VERSION=$(node -p "require('./package.json').dependencies['react-native']")
-            
-            echo "Detect kiya gaya App Name: $APP_NAME"
-            echo "Detect kiya gaya React Native Version: $RN_VERSION"
-            
-            # Khali android folder ko remove karke naya generate karna
-            rm -rf android
-            npx @react-native-community/cli init "$APP_NAME" --skip-install --version "$RN_VERSION"
-            
-            # Naye generated folder ko root me move karna
-            mv "$APP_NAME/android" ./android
-            rm -rf "$APP_NAME"
-            
-            echo "✅ Android folder successfully recreate ho gaya!"
-          fi
-
-      # 5. Auto-Push: Naye Android folder ko aapke GitHub Repo me push karna
-      - name: Commit and Push Generated Android Folder
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add android/
-          
-          if git diff --staged --quiet; then
-            echo "Koi nayi files commit karne ke liye nahi mili."
-          else
-            # [skip ci] lagaya hai taaki push hone par dobara automatic duplicate build start na ho
-            git commit -m "chore: auto-generated missing android folder [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
-            echo "✅ Android folder aapke GitHub repo me push kar diya gaya hai!"
-          fi
-
-      # 6. Setup Java JDK 17 aur Gradle Cache
+      # 4. Setup Java JDK 17 aur Gradle Cache
       - name: Setup Java JDK 17
         uses: actions/setup-java@v4
         with:
@@ -80,20 +33,20 @@ jobs:
           distribution: 'zulu'
           cache: 'gradle'
 
-      # 7. Execution Permission Dena
+      # 5. Execution Permission Dena
       - name: Grant Execute Permission to Gradlew
         run: chmod +x android/gradlew
 
-      # 8. Android APK Build Karna
+      # 6. Build Android APK (Release)
       - name: Build Android APK (Release)
         run: |
           cd android
           ./gradlew assembleRelease --no-daemon
 
-      # 9. Finished APK ko GitHub Artifacts me Upload karna
+      # 7. Upload Finished APK (Auto-Fix: Wildcard use kiya hai taaki path error kabhi na aaye)
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
