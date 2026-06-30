@@ -47,20 +47,45 @@ jobs:
           "
           npm install --legacy-peer-deps
 
-      # 4. Auto-Fix: Bypass AAR Version Checks & Target SDK 34
+      # 4. Ultimate Auto-Fix: Inject Kotlin Engine & Force SDK 34 Globally
       - name: Ultimate Android Patch Engine
         run: |
-          echo "⚠️ Injected Android structural patches..."
+          echo "⚠️ Injecting Kotlin Engine & Force Resolving SDK 34..."
+          
+          # Node script to cleanly inject Kotlin & Subproject configurations into root gradle
+          node -e "
+          const fs = require('fs');
+          let file = fs.readFileSync('android/build.gradle', 'utf8');
+          
+          // Inject Kotlin configuration inside ext block
+          if (file.includes('ext {')) {
+            file = file.replace('ext {', 'ext {\n        compileSdkVersion = 34\n        targetSdkVersion = 34\n        minSdkVersion = 21\n        buildToolsVersion = \"34.0.0\"\n        kotlinVersion = \"1.8.22\"');
+          }
+          
+          // Inject Kotlin Classpath plugin inside buildscript dependencies
+          if (file.includes('dependencies {')) {
+            file = file.replace('dependencies {', 'dependencies {\n        classpath \"org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.22\"');
+          }
+          
+          // Force subproject rules so 'compileSdkVersion' missing error can never happen
+          file += '\nsubprojects {\n    afterEvaluate { project ->\n        if (project.hasProperty(\"android\")) {\n            project.android {\n                compileSdkVersion 34\n                buildToolsVersion \"34.0.0\"\n            }\n        }\n    }\n}\n';
+          
+          fs.writeFileSync('android/build.gradle', file);
+          "
+
+          # Force update app level configurations
           find android/ -name "build.gradle" -type f -exec sed -i 's/compileSdkVersion = 33/compileSdkVersion = 34/g' {} +
           find android/ -name "build.gradle" -type f -exec sed -i 's/targetSdkVersion = 33/targetSdkVersion = 34/g' {} +
           find android/ -name "build.gradle" -type f -exec sed -i 's/compileSdkVersion 33/compileSdkVersion 34/g' {} +
           find android/ -name "build.gradle" -type f -exec sed -i 's/targetSdkVersion 33/targetSdkVersion 34/g' {} +
           
-          # AAR verification rules bypass
+          # Suppress AAR metadata conflicts
           echo -e "\n\ntasks.whenTaskAdded { task ->\n    if (task.name.contains('checkReleaseAarMetadata') || task.name.contains('checkDebugAarMetadata')) {\n        task.enabled = false\n    }\n}" >> android/app/build.gradle
           
-          # Webkit duplicate rules suppression
-          echo -e "\nallprojects {\n    configurations.all {\n        resolutionStrategy {\n            force 'androidx.webkit:webkit:1.8.0'\n        }\n    }\n}" >> android/build.gradle
+          # Force apply safe fallback resolution strategy
+          echo -e "\nallprojects {\n    configurations.all {\n        resolutionStrategy {\n            force 'androidx.webkit:webkit:1.8.0'\n            force 'androidx.annotation:annotation-experimental:1.3.0'\n        }\n    }\n}" >> android/build.gradle
+          
+          echo "✅ Applied all patches successfully!"
 
       # 5. Setup Java JDK 17
       - name: Setup Java JDK 17
