@@ -2,8 +2,8 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ] # Jab aap push karenge toh automatic chalega
-  workflow_dispatch: # GitHub UI se manually chalane ke liye
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build-android:
@@ -14,18 +14,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Setup Node.js (Error Fixed: Cache line removed to prevent lock-file error)
+      # 2. Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20 # Node deprecation warning se bachne ke liye version 20 kiya hai
+          node-version: 20
 
       # 3. Install Dependencies
       - name: Install Dependencies
         run: |
           npm install --legacy-peer-deps
 
-      # 4. Setup Java JDK 17 aur Gradle Caching
+      # 4. Setup Java JDK 17
       - name: Setup Java JDK 17
         uses: actions/setup-java@v4
         with:
@@ -33,9 +33,21 @@ jobs:
           distribution: 'zulu'
           cache: 'gradle'
 
-      # 5. Gradlew Permission (Permission denied error se bachne ke liye)
-      - name: Grant Execute Permission to Gradlew
-        run: chmod +x android/gradlew
+      # 5. Auto-Fix: Check & Generate Gradlew if missing
+      - name: Check and Fix Gradlew File
+        run: |
+          if [ -d "android" ]; then
+            cd android
+            if [ ! -f "gradlew" ]; then
+              echo "⚠️ gradlew file missing hai! Auto-generating gradle wrapper..."
+              gradle wrapper
+            fi
+            echo "✅ Granting execute permission to gradlew..."
+            chmod +x gradlew
+          else
+            echo "❌ ERROR: 'android' folder aapke GitHub repository me nahi mila! Kripya check karein ki aapne android folder push kiya hai ya nahi."
+            exit 1
+          fi
 
       # 6. Build Android APK
       - name: Build Android APK (Release)
