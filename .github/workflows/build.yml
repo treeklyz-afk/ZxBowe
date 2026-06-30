@@ -20,32 +20,49 @@ jobs:
         with:
           node-version: 22
 
-      # 3. Inject Stable Webview & Dependencies
-      - name: Auto-Inject Stable Dependencies
+      # 3. Auto-Detect & Install ALL Missing Modules from App.tsx
+      - name: Auto-Detect and Fix Missing Dependencies
         run: |
-          npm install react-native-linear-gradient react-native-webview@13.8.7 --save --legacy-peer-deps
+          echo "🔍 Scanning App.tsx for missing modules..."
+          node -e "
+          const fs = require('fs');
+          const { execSync } = require('child_process');
+          if (fs.existsSync('App.tsx')) {
+            const content = fs.readFileSync('App.tsx', 'utf8');
+            const matches = content.matchAll(/from\s+['\"]([^'\"]+)['\"]/g);
+            const pkgs = new Set(['react-native-linear-gradient', 'react-native-webview@13.8.7']);
+            for (const match of matches) {
+              const pkg = match[1];
+              if (!pkg.startsWith('.') && pkg !== 'react' && pkg !== 'react-native') {
+                let base = pkg.startsWith('@') ? pkg.split('/').slice(0, 2).join('/') : pkg.split('/')[0];
+                pkgs.add(base);
+              }
+            }
+            if (pkgs.size > 0) {
+              const cmd = 'npm install ' + Array.from(pkgs).join(' ') + ' --save --legacy-peer-deps';
+              console.log('🚀 Auto-Installing discovered packages:', Array.from(pkgs));
+              execSync(cmd, { stdio: 'inherit' });
+            }
+          }
+          "
           npm install --legacy-peer-deps
 
-      # 4. Ultimate Auto-Fix: Bypass AAR Version Checks & Target SDK 34
-      - name: Ultimate Auto-Fix Engine
+      # 4. Auto-Fix: Bypass AAR Version Checks & Target SDK 34
+      - name: Ultimate Android Patch Engine
         run: |
-          echo "⚠️ Automated Patch Mode Active! Solving AGP Mismatch..."
-          
-          # Force set compilation tags globally
+          echo "⚠️ Injected Android structural patches..."
           find android/ -name "build.gradle" -type f -exec sed -i 's/compileSdkVersion = 33/compileSdkVersion = 34/g' {} +
           find android/ -name "build.gradle" -type f -exec sed -i 's/targetSdkVersion = 33/targetSdkVersion = 34/g' {} +
           find android/ -name "build.gradle" -type f -exec sed -i 's/compileSdkVersion 33/compileSdkVersion 34/g' {} +
           find android/ -name "build.gradle" -type f -exec sed -i 's/targetSdkVersion 33/targetSdkVersion 34/g' {} +
-
-          # [NUCLEAR FIX]: App ki metadata check verification task ko runtime par bypass karna
+          
+          # AAR verification rules bypass
           echo -e "\n\ntasks.whenTaskAdded { task ->\n    if (task.name.contains('checkReleaseAarMetadata') || task.name.contains('checkDebugAarMetadata')) {\n        task.enabled = false\n    }\n}" >> android/app/build.gradle
           
-          # Force resolution fallback down to safe webkit rules
+          # Webkit duplicate rules suppression
           echo -e "\nallprojects {\n    configurations.all {\n        resolutionStrategy {\n            force 'androidx.webkit:webkit:1.8.0'\n        }\n    }\n}" >> android/build.gradle
-          
-          echo "✅ Critical fixes injected! Metadata warning disabled, build bypass configured."
 
-      # 5. Setup Java JDK 17 aur Gradle Cache
+      # 5. Setup Java JDK 17
       - name: Setup Java JDK 17
         uses: actions/setup-java@v4
         with:
