@@ -5,12 +5,16 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+# Git Push karne ke liye write permission zaroori hai
+permissions:
+  contents: write
+
 jobs:
   build-android:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Code Checkout
+      # 1. Repository Checkout
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -20,12 +24,55 @@ jobs:
         with:
           node-version: 20
 
-      # 3. Install Dependencies
+      # 3. Dependencies Install Karna
       - name: Install Dependencies
         run: |
           npm install --legacy-peer-deps
 
-      # 4. Setup Java JDK 17
+      # 4. Auto-Fix: Pure Android Folder Template Generate Karna
+      - name: Auto-Create Missing Android Files
+        run: |
+          if [ ! -f "android/build.gradle" ]; then
+            echo "⚠️ Android folder khali hai! React Native CLI se auto-generate kar rahe hain..."
+            
+            # app.json se app ka real name nikalna
+            APP_NAME=$(node -p "try { require('./app.json').name || require('./app.json').displayName } catch(e) { 'App' }")
+            # package.json se current react-native version nikalna
+            RN_VERSION=$(node -p "require('./package.json').dependencies['react-native']")
+            
+            echo "Detect kiya gaya App Name: $APP_NAME"
+            echo "Detect kiya gaya React Native Version: $RN_VERSION"
+            
+            # Khali android folder ko remove karke naya generate karna
+            rm -rf android
+            npx @react-native-community/cli init "$APP_NAME" --skip-install --version "$RN_VERSION"
+            
+            # Naye generated folder ko root me move karna
+            mv "$APP_NAME/android" ./android
+            rm -rf "$APP_NAME"
+            
+            echo "✅ Android folder successfully recreate ho gaya!"
+          fi
+
+      # 5. Auto-Push: Naye Android folder ko aapke GitHub Repo me push karna
+      - name: Commit and Push Generated Android Folder
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add android/
+          
+          if git diff --staged --quiet; then
+            echo "Koi nayi files commit karne ke liye nahi mili."
+          else
+            # [skip ci] lagaya hai taaki push hone par dobara automatic duplicate build start na ho
+            git commit -m "chore: auto-generated missing android folder [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+            echo "✅ Android folder aapke GitHub repo me push kar diya gaya hai!"
+          fi
+
+      # 6. Setup Java JDK 17 aur Gradle Cache
       - name: Setup Java JDK 17
         uses: actions/setup-java@v4
         with:
@@ -33,29 +80,17 @@ jobs:
           distribution: 'zulu'
           cache: 'gradle'
 
-      # 5. Auto-Fix: Check & Generate Gradlew if missing
-      - name: Check and Fix Gradlew File
-        run: |
-          if [ -d "android" ]; then
-            cd android
-            if [ ! -f "gradlew" ]; then
-              echo "⚠️ gradlew file missing hai! Auto-generating gradle wrapper..."
-              gradle wrapper
-            fi
-            echo "✅ Granting execute permission to gradlew..."
-            chmod +x gradlew
-          else
-            echo "❌ ERROR: 'android' folder aapke GitHub repository me nahi mila! Kripya check karein ki aapne android folder push kiya hai ya nahi."
-            exit 1
-          fi
+      # 7. Execution Permission Dena
+      - name: Grant Execute Permission to Gradlew
+        run: chmod +x android/gradlew
 
-      # 6. Build Android APK
+      # 8. Android APK Build Karna
       - name: Build Android APK (Release)
         run: |
           cd android
           ./gradlew assembleRelease --no-daemon
 
-      # 7. Upload Finished APK
+      # 9. Finished APK ko GitHub Artifacts me Upload karna
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
